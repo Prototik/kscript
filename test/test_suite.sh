@@ -2,6 +2,7 @@
 #/bin/bash -x
 
 export DEBUG="--verbose"
+KSCRIPT_JAR="${KSCRIPT_HOME}/build/install/kscript/bin/kscript.jar"
 
 . assert.sh
 
@@ -108,7 +109,7 @@ assert_end script_input_modes
 ## environment_tests
 
 ## do not run interactive mode prep without script argument
-assert_raises "kscript -i" 1
+assert_raises "kscript -i" 2
 
 ## make sure that KOTLIN_HOME can be guessed from kotlinc correctly
 assert "unset KOTLIN_HOME; echo 'println(99)' | kscript -" "99"
@@ -126,17 +127,17 @@ assert_end environment_tests
 ## dependency_lookup
 
 # export KSCRIPT_HOME="/Users/brandl/projects/kotlin/kscript"; export PATH=${KSCRIPT_HOME}:${PATH}
-resolve_deps() { kotlin -classpath ${KSCRIPT_HOME}/build/libs/kscript.jar kscript.app.DependencyUtil "$@";}
+resolve_deps() { kotlin -classpath "$KSCRIPT_JAR" kscript.app.DependencyUtil "$@";}
 export -f resolve_deps
 
 
 assert_stderr "resolve_deps log4j:log4j:1.2.14" "${HOME}/.m2/repository/log4j/log4j/1.2.14/log4j-1.2.14.jar"
 
 ## impossible version
-assert "resolve_deps log4j:log4j:9.8.76" "false"
+assert_raises "resolve_deps log4j:log4j:9.8.76" 1
 
 ## wrong format should exit with 1
-assert "resolve_deps log4j:1.0" "false"
+assert_raises "resolve_deps log4j:1.0" 1
 
 assert_stderr "resolve_deps log4j:1.0" "[ERROR] Invalid dependency locator: 'log4j:1.0'.  Expected format is groupId:artifactId:version[:classifier][@type]"
 
@@ -261,7 +262,7 @@ assert "source ${KSCRIPT_HOME}/test/resources/home_dir_include.sh" "42"
 assert "source ${KSCRIPT_HOME}/test/resources/compiler_opts_with_includes.sh" "hello42"
 
 
-kscript_nocall() { kotlin -classpath ${KSCRIPT_HOME}/build/libs/kscript.jar kscript.app.KscriptKt "$@";}
+kscript_nocall() { kotlin -classpath "$KSCRIPT_JAR" kscript.app.KscriptKt "$@";}
 export -f kscript_nocall
 
 ## temp projects with include symlinks
@@ -276,15 +277,6 @@ assert_raises 'tmpDir=$(kscript_nocall --idea test/resources/includes/diamond.kt
 ## todo reenable interactive mode tests using kscript_nocall
 
 assert_end misc
-
-
-########################################################################################################################
-##  run junit-test suite
-
-# exit code of `true` is expected to be 0 (see https://github.com/lehmannro/assert.sh)
-assert_raises "./gradlew test"
-
-assert_end junit_tests
 
 
 ########################################################################################################################

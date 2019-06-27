@@ -1,18 +1,20 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
-    kotlin("jvm") version "1.2.70"
-    id("com.github.johnrengelman.shadow") version "2.0.4"
+    kotlin("jvm") version "1.3.40"
+    id("com.github.johnrengelman.shadow") version "5.0.0"
+    distribution
 }
 
-group = "com.github.holgerbrandl.kscript.launcher"
+val jcabi_aether_version: String by ext
+val maven_version: String by ext
+val slf4j_version: String by ext
+val kotlin_argparser_version: String by ext
 
 dependencies {
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib")
+    compileOnly(kotlin("stdlib"))
 
-    compile("com.offbytwo:docopt:0.6.0.20150202")
-
-    compile("com.jcabi:jcabi-aether:0.10.1") {
+    compile("com.jcabi:jcabi-aether:$jcabi_aether_version") {
         exclude("org.hibernate", "hibernate-validator")
         exclude("org.slf4j", "slf4j-api")
         exclude("org.slf4j", "jcl-over-slf4j")
@@ -21,11 +23,11 @@ dependencies {
         exclude("org.kuali.maven.wagons", "maven-s3-wagon")
     }
     // compile("com.jcabi:jcabi-aether:0.10.1:sources") //can be used for debugging, but somehow adds logging to dependency resolvement?
-    compile("org.apache.maven:maven-core:3.0.3")
-    compile("org.slf4j:slf4j-nop:1.7.25")
+    compile("org.apache.maven:maven-core:$maven_version")
+    compile("org.slf4j:slf4j-nop:$slf4j_version")
+    compile("com.xenomachina:kotlin-argparser:$kotlin_argparser_version")
 
-    testCompile("junit:junit:4.12")
-    testCompile( "io.kotlintest:kotlintest:2.0.7")
+    testCompile(kotlin("test-junit"))
     testCompile(kotlin("script-runtime"))
 }
 
@@ -33,22 +35,19 @@ repositories {
     jcenter()
 }
 
-val shadowJar by tasks.getting(ShadowJar::class) {
-    // set empty string to classifier and version to get predictable jar file name: build/libs/kscript.jar
-    archiveName = "kscript.jar"
-    doLast {
-        copy {
-            from(File(projectDir, "src/kscript"))
-            into(archivePath.parentFile)
+val shadowJar by tasks.getting(ShadowJar::class)
+
+distributions {
+    named("main") {
+        contents {
+            into("bin") {
+                from(shadowJar) {
+                    rename(".*\\.jar", "kscript.jar")
+                }
+                from(file("src/kscript"))
+
+                fileMode = "755".toInt(radix = 8)
+            }
         }
     }
-}
-
-// Disable standard jar task to avoid building non-shadow jars
-val jar by tasks.getting {
-    enabled = false
-}
-// Build shadowJar when
-val assemble by tasks.getting {
-    dependsOn(shadowJar)
 }

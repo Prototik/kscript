@@ -4,6 +4,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.net.URI
 import java.net.URL
+import kotlin.system.*
 
 /**
  * @author Holger Brandl
@@ -51,7 +52,7 @@ fun resolveIncludes(template: File, includeContext: URI = template.parentFile.to
                     } catch (e: FileNotFoundException) {
                         errorMsg("Failed to resolve //INCLUDE '${include}'")
                         System.err.println(e.message?.lines()!!.map { it.prependIndent("[kscript] [ERROR] ") })
-                        quit(1)
+                        exitProcess(1)
                     }
                 }
             } else {

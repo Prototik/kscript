@@ -1,9 +1,8 @@
-import io.kotlintest.matchers.shouldBe
+package kscript.tests
+
 import kscript.app.*
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import java.io.File
+import java.io.*
+import kotlin.test.*
 
 /**
  * @author Holger Brandl
@@ -25,12 +24,13 @@ class Tests {
             "log4j:log4j:1.2.14"
         )
 
-        Script(lines).collectDependencies() shouldBe expected
+        assertEquals(expected, Script(lines).collectDependencies())
     }
 
     @Test
     fun parseAnnotDependencies() {
-        val lines = listOf("""@file:DependsOn("something:dev-1.1.0-alpha3(T2):1.2.14", "de.mpicbg.scicomp:kutils:0.7")""")
+        val lines =
+            listOf("""@file:DependsOn("something:dev-1.1.0-alpha3(T2):1.2.14", "de.mpicbg.scicomp:kutils:0.7")""")
 
         val expected = listOf(
             "something:dev-1.1.0-alpha3(T2):1.2.14",
@@ -38,7 +38,7 @@ class Tests {
             "com.github.holgerbrandl:kscript-annotations:1.4"
         )
 
-        Script(lines).collectDependencies() shouldBe expected
+        assertEquals(expected, Script(lines).collectDependencies())
 
         // but reject comma separation within dependency entries
         // note: disabled because quits kscript by design
@@ -61,7 +61,7 @@ class Tests {
             "com.github.holgerbrandl:kscript-annotations:1.4"
         )
 
-        Script(lines).collectDependencies() shouldBe expected
+        assertEquals(expected, Script(lines).collectDependencies())
     }
 
 
@@ -75,15 +75,18 @@ class Tests {
         )
 
         with(Script(lines)) {
-
-            collectRepos() shouldBe listOf(
-                MavenRepo("imagej-releases", "http://maven.imagej.net/content/repositories/releases")
+            assertEquals(
+                listOf(
+                    MavenRepo("imagej-releases", "http://maven.imagej.net/content/repositories/releases")
+                ), collectRepos()
             )
 
-            collectDependencies() shouldBe listOf(
-                "net.clearvolume:cleargl:2.0.1",
-                "log4j:log4j:1.2.14",
-                "com.github.holgerbrandl:kscript-annotations:1.4"
+            assertEquals(
+                listOf(
+                    "net.clearvolume:cleargl:2.0.1",
+                    "log4j:log4j:1.2.14",
+                    "com.github.holgerbrandl:kscript-annotations:1.4"
+                ), collectDependencies()
             )
         }
 
@@ -92,33 +95,57 @@ class Tests {
     @Test
     fun customRepoWithCreds() {
         val lines = listOf(
-                """@file:MavenRepository("imagej-releases", "http://maven.imagej.net/content/repositories/releases", user="user", password="pass") """,
-                // Same but name arg comes last
-                """@file:MavenRepository("imagej-snapshots", "http://maven.imagej.net/content/repositories/snapshots", password="pass", user="user") """,
-                // Whitespaces around credentials see #228
-                """@file:MavenRepository("spaceAroundCredentials", "http://maven.imagej.net/content/repositories/snapshots", password= "pass" , user= "user" ) """,
-                // Different whitespaces around credentials see #228
-                """@file:MavenRepository("spaceAroundCredentials2", "http://maven.imagej.net/content/repositories/snapshots", password= "pass", user="user" ) """,
+            """@file:MavenRepository("imagej-releases", "http://maven.imagej.net/content/repositories/releases", user="user", password="pass") """,
+            // Same but name arg comes last
+            """@file:MavenRepository("imagej-snapshots", "http://maven.imagej.net/content/repositories/snapshots", password="pass", user="user") """,
+            // Whitespaces around credentials see #228
+            """@file:MavenRepository("spaceAroundCredentials", "http://maven.imagej.net/content/repositories/snapshots", password= "pass" , user= "user" ) """,
+            // Different whitespaces around credentials see #228
+            """@file:MavenRepository("spaceAroundCredentials2", "http://maven.imagej.net/content/repositories/snapshots", password= "pass", user="user" ) """,
 
-                // some other script bits unrelated to the repo definition
-                """@file:DependsOnMaven("net.clearvolume:cleargl:2.0.1")""",
-                """@file:DependsOn("log4j:log4j:1.2.14")""",
-                """println("foo")"""
+            // some other script bits unrelated to the repo definition
+            """@file:DependsOnMaven("net.clearvolume:cleargl:2.0.1")""",
+            """@file:DependsOn("log4j:log4j:1.2.14")""",
+            """println("foo")"""
         )
 
         with(Script(lines)) {
 
-            collectRepos() shouldBe listOf(
-                    MavenRepo("imagej-releases", "http://maven.imagej.net/content/repositories/releases", "user", "pass"),
-                    MavenRepo("imagej-snapshots", "http://maven.imagej.net/content/repositories/snapshots", "user", "pass"),
-                    MavenRepo("spaceAroundCredentials", "http://maven.imagej.net/content/repositories/snapshots", "user", "pass"),
-                    MavenRepo("spaceAroundCredentials2", "http://maven.imagej.net/content/repositories/snapshots", "user", "pass")
+            assertEquals(
+                listOf(
+                    MavenRepo(
+                        "imagej-releases",
+                        "http://maven.imagej.net/content/repositories/releases",
+                        "user",
+                        "pass"
+                    ),
+                    MavenRepo(
+                        "imagej-snapshots",
+                        "http://maven.imagej.net/content/repositories/snapshots",
+                        "user",
+                        "pass"
+                    ),
+                    MavenRepo(
+                        "spaceAroundCredentials",
+                        "http://maven.imagej.net/content/repositories/snapshots",
+                        "user",
+                        "pass"
+                    ),
+                    MavenRepo(
+                        "spaceAroundCredentials2",
+                        "http://maven.imagej.net/content/repositories/snapshots",
+                        "user",
+                        "pass"
+                    )
+                ), collectRepos()
             )
 
-            collectDependencies() shouldBe listOf(
+            assertEquals(
+                listOf(
                     "net.clearvolume:cleargl:2.0.1",
                     "log4j:log4j:1.2.14",
                     "com.github.holgerbrandl:kscript-annotations:1.4"
+                ), collectDependencies()
             )
         }
 
@@ -133,7 +160,7 @@ class Tests {
             "//KOTLIN_OPTS  --bar"
         )
 
-        Script(lines).collectRuntimeOptions() shouldBe "-foo 3 'some file.txt' --bar"
+        assertEquals(listOf("-foo", "3", "some file.txt", "--bar"), Script(lines).collectRuntimeOptions())
     }
 
     @Test
@@ -143,7 +170,7 @@ class Tests {
             """@file:KotlinOpts("--bar")"""
         )
 
-        Script(lines).collectRuntimeOptions() shouldBe "-foo 3 'some file.txt' --bar"
+        assertEquals(listOf("-foo", "3", "some file.txt", "--bar"), Script(lines).collectRuntimeOptions())
     }
 
     @Test
@@ -161,7 +188,7 @@ class Tests {
             fun a = ""
             """.trimIndent()
 
-        Script(commentDriven.lines()).findEntryPoint() shouldBe "Foo"
+        assertEquals(Script(commentDriven.lines()).findEntryPoint(), "Foo")
 
 
         val annotDriven = """
@@ -170,7 +197,7 @@ class Tests {
             fun a = ""
             """.trimIndent()
 
-        Script(annotDriven.lines()).findEntryPoint() shouldBe "Foo"
+        assertEquals(Script(annotDriven.lines()).findEntryPoint(), "Foo")
     }
 
 
@@ -181,7 +208,7 @@ class Tests {
 
         val result = resolveIncludes(file)
 
-        result.scriptFile.readText() shouldBe (expected.readText())
+        assertEquals(expected.readText(), result.scriptFile.readText())
     }
 
 
@@ -192,24 +219,30 @@ class Tests {
 
         val result = resolveIncludes(file)
 
-        result.scriptFile.readText() shouldBe (expected.readText())
+        assertEquals(expected.readText(), result.scriptFile.readText())
     }
 
     @Test
     fun test_include_detection() {
         val result = resolveIncludes(File("test/resources/includes/include_variations.kts"))
 
-        result.includes.filter { it.protocol == "file" }.map { File(it.toURI()).name } shouldBe List(4) { "include_${it + 1}.kt" }
-        result.includes.filter { it.protocol != "file" }.size shouldBe 1
+        val fileIncludes = result.includes.filter { it.protocol == "file" }
+        val nonFileIncludes = result.includes.filter { it.protocol != "file" }
+
+        assertEquals(List(4) { "include_${it + 1}.kt" }, fileIncludes.map { File(it.toURI()).name })
+        assertEquals(1, nonFileIncludes.size)
     }
 
     @Test
     fun `test include detection - should not include dependency twice`() {
-      val result = resolveIncludes(File("test/resources/includes/dup_include/dup_include.kts"))
+        val result = resolveIncludes(File("test/resources/includes/dup_include/dup_include.kts"))
 
-      result.includes.map { File(it.toURI()).name } shouldBe listOf(
-            "dup_include_1.kt",
-            "dup_include_2.kt"
+        assertEquals(
+            listOf(
+                "dup_include_1.kt",
+                "dup_include_2.kt"
+            ),
+            result.includes.map { File(it.toURI()).name }
         )
     }
 }

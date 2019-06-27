@@ -1,79 +1,68 @@
-language: bash
+language: java
 
-sudo: required
-dist: trusty
+jdk:
+  - openjdk8
 
-#addons:
-#  apt:
-#    packages:
-#      - oracle-java8-installer
+dist: xenial
 
-#jdk: oraclejdk8
-#https://github.com/travis-ci/travis-ci/issues/6371
-#before_install:
-#  - jdk_switcher use oraclejdk8
+addons:
+  homebrew:
+    packages:
+      - kotlin
+    update: true
+
+stages:
+  - build
+  - test
+  - name: release
+    if: tag IS present
 
 install:
-#  - sudo apt-get install oracle-java8-set-default
-
-## see https://askubuntu.com/questions/190582/installing-java-automatically-with-silent-option
-  - sudo apt-get update
-  - sudo apt-get install -y python-software-properties
-#  - sudo add-apt-repository -y ppa:webupd8team/java
-#  - echo "oracle-java8-installer shared/accepted-oracle-license-v1-1 select true" | sudo debconf-set-selections
-#  - sudo apt-get install -y oracle-java8-installer
-
-  - sudo add-apt-repository -y ppa:openjdk-r/ppa
-  - sudo apt-get update
-  - sudo apt-get install openjdk-8-jdk
-  # workaround for missing cacerts in openjdk
-  - sudo dpkg --purge --force-depends ca-certificates-java
-  - sudo apt-get install ca-certificates-java
-
-#  - sudo apt-get install -y openjdk-8-jdk
-  - sudo apt-get install -y curl unzip zip wget
-
-  ## install sdkman (see http://sdkman.io/install.html)
-  - bash -c "curl -s "https://get.sdkman.io" | bash"
-  - source "/home/travis/.sdkman/bin/sdkman-init.sh"
-
-  ## install kotlin and maven
-#  - bash -c 'source "/home/travis/.sdkman/bin/sdkman-init.sh"; yes | sdk install java 8u144-oracle'
-#  - bash -c 'source "/home/travis/.sdkman/bin/sdkman-init.sh"; yes | sdk install java 8u144-zulu'
-#  - sudo apt-get install -y openjdk-8-jdk
+  - source <(curl -s "https://get.sdkman.io")
+  - source "$HOME/.sdkman/bin/sdkman-init.sh"
   - sdk install kotlin
-  - sdk install gradle
+  - curl -LO https://raw.github.com/lehmannro/assert.sh/v1.1/assert.sh && chmod +x assert.sh
+  - export PATH="$(pwd):$PATH"
 
-  - export KSCRIPT_HOME=${TRAVIS_BUILD_DIR}
-  - export PATH=${KSCRIPT_HOME}/build/libs:$PATH
+# https://docs.travis-ci.com/user/languages/java/#caching
+before_cache:
+  - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
+  - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
+cache:
+  directories:
+    - $HOME/.gradle/caches/
+    - $HOME/.gradle/wrapper/
 
-  # build it
-  - cd $KSCRIPT_HOME && ./gradlew assemble
+jobs:
+  include:
+    - name: Assemble artifacts
+      stage: build
+      script: ./gradlew assemble
+      install: skip
+    - name: Internal API tests
+      stage: test
+      script: ./gradlew check
+      install: skip
+    - name: Integration tests
+      stage: test
+      script:
+        - export KSCRIPT_HOME=${TRAVIS_BUILD_DIR}
 
-  ## install assert.h
-  - wget https://raw.github.com/lehmannro/assert.sh/v1.1/assert.sh && chmod +x assert.sh
-  - export PATH=$(pwd):$PATH
+        # Install kscript dist and populate PATH with it
+        - ./gradlew installDist
+        - export PATH="${KSCRIPT_HOME}/build/install/kscript/bin:$PATH"
 
+        # Required tools here?
+        - which kscript
+        - which assert.sh
 
-  - which kscript
-  - which assert.sh
+        ## does it run outside of test-suite?
+        - kscript --help
+        - java -version
 
-  ## does it run outside of test-suite?
-  - kscript --help
-  - java -version
+        ## create mock `idea` to allow for idea environment bootstrapping tests (see kscript_nocall)
+        - touch idea && chmod +x idea
 
-  ## create mock `idea` to allow for idea environment bootstrapping tests (see kscript_nocall)
-  - touch idea && chmod +x idea
+        - kscript 'println("kotlin rocks")'
 
-  - kscript 'println("kotlin rocks")'
-##  - kscript ${KSCRIPT_HOME}/test/resources/multi_line_deps.kts
-#  - export tmpDir=$(kotlin -classpath ${KSCRIPT_HOME}/build/libs/kscript.jar kscript.app.KscriptKt --idea test/resources/includes/include_variations.kts | cut -f2 -d" ")
-#    cd $tmpDir && gradle build
-
-#  - resdeps.kts org.org.docopt:org.docopt:0.6.0-SNAPSHOT log4j:log4j:1.2.14
-#  - kscript ${KSCRIPT_HOME}/test/resources/multi_line_deps.kts
-
-  - cd $KSCRIPT_HOME
-
-script: ./test/test_suite.sh
-
+        - test/test_suite.sh

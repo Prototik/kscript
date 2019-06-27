@@ -1,12 +1,9 @@
 package kscript.app
 
+import com.xenomachina.argparser.*
 import kscript.app.ShellUtils.requireInPath
-import org.docopt.DocOptWrapper
 import org.intellij.lang.annotations.Language
-import java.io.BufferedReader
-import java.io.File
-import java.io.FileInputStream
-import java.io.InputStreamReader
+import java.io.*
 import java.net.URI
 import java.net.URL
 import java.net.UnknownHostException
@@ -25,31 +22,18 @@ const val KSCRIPT_VERSION = "2.8.0"
 
 val selfName = System.getenv("CUSTOM_KSCRIPT_NAME") ?: "kscript"
 
-val USAGE = """
-$selfName - Enhanced scripting support for Kotlin on *nix-based systems.
-
-Usage:
- $selfName [options] <script> [<script_args>]...
- $selfName --clear-cache
-
-The <script> can be a  script file (*kts), a script URL, - for stdin, a *.kt source file with a main method, or some kotlin code.
+val helpPrologue = """
+The <SCRIPT> can be a  script file (*kts), a script URL, - for stdin, a *.kt source file with a main method, or some kotlin code.
 
 Use '--clear-cache' to wipe cached script jars and urls
+""".trimIndent()
 
-Options:
- -i --interactive        Create interactive shell with dependencies as declared in script
- -t --text               Enable stdin support API for more streamlined text processing
- --idea                  Open script in temporary Intellij session
- -s --silent             Suppress status logging to stderr
- --package               Package script and dependencies into self-dependent binary
- --add-bootstrap-header  Prepend bash header that installs kscript if necessary
-
-
-Copyright : 2017 Holger Brandl
+val helpEpilogue = """
+Copyright : 2019 Holger Brandl
 License   : MIT
 Version   : v$KSCRIPT_VERSION
 Website   : https://github.com/holgerbrandl/kscript
-""".trim()
+""".trimIndent()
 
 // see https://stackoverflow.com/questions/585534/what-is-the-best-way-to-find-the-users-home-directory-in-java
 // See #146 "allow kscript cache dir to be configurable" for details
@@ -72,21 +56,33 @@ private val BOOTSTRAP_HEADER = """
     """.trimIndent().lines()
 
 
-fun main(args: Array<String>) {
-    // skip org.docopt for version and help to allow for lazy version-check
-    if (args.size == 1 && listOf("--help", "-h", "--version", "-v").contains(args[0])) {
-        info(USAGE)
-        versionCheck()
-        quit(0)
+fun main(vararg args: String)  {
+    val kscriptArgs = try {
+        // WARNING THIS HACK MAY RUIN YOUR FAITH IN KOTLIN LIBRARIES
+        // Well... kotlin-argparser cannot parse single `-` parameter as a positional argument, so...
+        // We detect `-` here and use some Advanced Level Magic © to emulate old behavior
+
+        fun parse(args: Array<out String>, block: (ArgParser) -> KscriptArgs): KscriptArgs {
+            val helpFormatter = DefaultHelpFormatter(helpPrologue, helpEpilogue)
+            return ArgParser(args, ArgParser.Mode.POSIX, helpFormatter).parseInto(block)
+        }
+
+        val idx = args.indexOf("-")
+        if (idx >= 0) {
+            parse(args.take(idx).toTypedArray()) {
+                KscriptArgs.StdinHack(it, args.drop(idx + 1))
+            }
+        } else {
+            parse(args, KscriptArgs::General)
+        }
+    } catch(e: SystemExitException) {
+        val writer = OutputStreamWriter(System.err)
+        e.printUserMessage(writer, selfName, 0)
+        writer.flush()
+        exitProcess(e.returnCode)
     }
 
-    // note: with current impt we still don't support `kscript -1` where "-1" is a valid kotlin expression
-    val userArgs = args.dropWhile { it.startsWith("-") && it != "-" }.drop(1)
-    val kscriptArgs = args.take(args.size - userArgs.size)
-
-    val docopt = DocOptWrapper(kscriptArgs, USAGE)
-    val loggingEnabled = !docopt.getBoolean("silent")
-
+    val loggingEnabled = kscriptArgs.silent
 
     // create cache dir if it does not yet exist
     if (!KSCRIPT_CACHE_DIR.isDirectory) {
@@ -94,20 +90,20 @@ fun main(args: Array<String>) {
     }
 
     // optionally clear up the jar cache
-    if (docopt.getBoolean("clear-cache")) {
+    if (kscriptArgs.clearCache) {
         info("Cleaning up cache...")
         KSCRIPT_CACHE_DIR.listFiles().forEach { it.delete() }
         //        evalBash("rm -f ${KSCRIPT_CACHE_DIR}/*")
-        quit(0)
+        exitProcess(0)
     }
 
     // Resolve the script resource argument into an actual file
-    val scriptResource = docopt.getString("script")
+    val scriptResource = kscriptArgs.script
 
-    val enableSupportApi = docopt.getBoolean("text")
+    val enableSupportApi = kscriptArgs.text
     val (rawScript, includeContext) = prepareScript(scriptResource)
 
-    if (docopt.getBoolean("add-bootstrap-header")) {
+    if (kscriptArgs.addBootstrapHeader) {
         errorIf(!rawScript.canWrite()) {
             "Script file not writable: $rawScript"
         }
@@ -132,7 +128,7 @@ fun main(args: Array<String>) {
         if (loggingEnabled) {
             info("$rawScript updated")
         }
-        quit(0)
+        exitProcess(0)
     }
 
     // post process script (text-processing mode, custom dsl preamble, resolve includes)
@@ -149,7 +145,7 @@ fun main(args: Array<String>) {
 
 
     //  Create temporary dev environment
-    if (docopt.getBoolean("idea")) {
+    if (kscriptArgs.idea) {
         println(launchIdeaWithKscriptlet(rawScript, dependencies, customRepos, includeURLs))
         exitProcess(0)
     }
@@ -164,13 +160,14 @@ fun main(args: Array<String>) {
 
 
     //  Optionally enter interactive mode
-    if (docopt.getBoolean("interactive")) {
+    if (kscriptArgs.interactive) {
         infoMsg("Creating REPL from ${scriptFile}")
-        //        System.err.println("kotlinc ${kotlinOpts} -classpath '${classpath}'")
 
-        println("kotlinc ${compilerOpts} ${kotlinOpts} ${optionalCpArg}")
-
-        exitProcess(0)
+        val cmd = mutableListOf("kotlinc")
+        cmd += compilerOpts
+        cmd += kotlinOpts
+        cmd += optionalCpArg
+        printExecCommand(cmd)
     }
 
     val scriptFileExt = scriptFile.extension
@@ -264,11 +261,10 @@ fun main(args: Array<String>) {
     }
 
 
-    // print the final command to be run by eval+exec
-    val joinedUserArgs = userArgs.map { "\"${it.replace("\"", "\\\"")}\"" }.joinToString(" ")
+    // print the final command to be run by exec
 
     //if requested try to package the into a standalone binary
-    if (docopt.getBoolean("package")) {
+    if (kscriptArgs.pack) {
         val binaryName = if (File(scriptResource).run { canRead() && listOf("kts", "kt").contains(extension) }) {
             File(scriptResource).nameWithoutExtension
         } else {
@@ -277,14 +273,20 @@ fun main(args: Array<String>) {
 
         packageKscript(jarFile, execClassName, dependencies, customRepos, kotlinOpts, binaryName)
 
-        quit(0)
+        exitProcess(0)
     }
 
-    var extClassPath = "${jarFile}${CP_SEPARATOR_CHAR}${KOTLIN_HOME}${File.separatorChar}lib${File.separatorChar}kotlin-script-runtime.jar"
+    var extClassPath = "${jarFile}${File.pathSeparatorChar}${KOTLIN_HOME}${File.separatorChar}lib${File.separatorChar}kotlin-script-runtime.jar"
     if (classpath.isNotEmpty())
-        extClassPath += kscript.app.CP_SEPARATOR_CHAR + classpath
+        extClassPath += File.pathSeparatorChar + classpath
 
-    println("kotlin ${kotlinOpts} -classpath \"${extClassPath}\" ${execClassName} ${joinedUserArgs} ")
+    val cmd = mutableListOf("kotlin")
+    cmd += kotlinOpts
+    cmd += "-classpath"
+    cmd += extClassPath
+    cmd += execClassName
+    cmd += kscriptArgs.scriptArgs
+    printExecCommand(cmd)
 }
 
 
@@ -412,3 +414,11 @@ private fun resolvePreambles(rawScript: File, enableSupportApi: Boolean): File {
 
 private fun postProcessScript(inputFile: File?, includeContext: URI): IncludeResult =
     resolveIncludes(inputFile!!, includeContext)
+
+private fun printExecCommand(args: Iterable<String>): Nothing {
+    args.forEach {
+        print(it)
+        print('\u0000')
+    }
+    exitProcess(0)
+}

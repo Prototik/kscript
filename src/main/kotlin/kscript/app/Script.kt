@@ -219,7 +219,7 @@ fun Script.collectRepos(): List<MavenRepo> {
 /**
  * Collect runtime options declared using //KOTLIN_OPTS or @file:KotlinOpts
  */
-fun Script.collectRuntimeOptions(): String {
+fun Script.collectRuntimeOptions(): List<String> {
     val koptsPrefix = "//KOTLIN_OPTS "
 
     var kotlinOpts = lines.filter { it.startsWith(koptsPrefix) }.map { it.replaceFirst(koptsPrefix, "").trim() }
@@ -237,14 +237,13 @@ fun Script.collectRuntimeOptions(): String {
         kotlinOpts = kotlinOpts + this
     }
 
-    return kotlinOpts.joinToString(" ")
+    return kotlinOpts
 }
-
 
 /**
  * Collect compiler options declared using //COMPILER_OPTS or @file:CompilerOpts
  */
-fun Script.collectCompilerOptions(): String {
+fun Script.collectCompilerOptions(): List<String> {
     val koptsPrefix = "//COMPILER_OPTS "
 
     var compilerOpts = lines.filter { it.startsWith(koptsPrefix) }.map { it.replaceFirst(koptsPrefix, "").trim() }
@@ -255,5 +254,5 @@ fun Script.collectCompilerOptions(): String {
         .map { it.replaceFirst(annotatonPrefix, "").split(")")[0] }
         .map { it.trim(' ', '"') }
 
-    return compilerOpts.joinToString(" ")
+    return compilerOpts
 }

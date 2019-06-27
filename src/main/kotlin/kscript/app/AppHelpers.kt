@@ -1,5 +1,6 @@
 package kscript.app
 
+import com.xenomachina.argparser.*
 import kscript.app.ShellUtils.requireInPath
 import java.io.*
 import java.net.URL
@@ -111,13 +112,8 @@ fun errorMsg(msg: String) = System.err.println("[kscript] [ERROR] " + msg)
 fun errorIf(value: Boolean, lazyMessage: () -> Any) {
     if (value) {
         errorMsg(lazyMessage().toString())
-        quit(1)
+        exitProcess(1)
     }
-}
-
-fun quit(status: Int): Nothing {
-    print(if (status == 0) "true" else "false")
-    exitProcess(status)
 }
 
 /** see discussion on https://github.com/holgerbrandl/kscript/issues/15*/
@@ -282,7 +278,7 @@ private fun createSymLink(link: File, target: File) {
  * Create and use a temporary gradle project to package the compiled script using capsule.
  * See https://github.com/puniverse/capsule
  */
-fun packageKscript(scriptJar: File, wrapperClassName: String, dependencies: List<String>, customRepos: List<MavenRepo>, runtimeOptions: String, appName: String) {
+fun packageKscript(scriptJar: File, wrapperClassName: String, dependencies: List<String>, customRepos: List<MavenRepo>, runtimeOptions: List<String>, appName: String) {
     requireInPath("gradle", "gradle is required to package kscripts")
 
     infoMsg("Packaging script '$appName' into standalone executable...")
@@ -295,7 +291,7 @@ fun packageKscript(scriptJar: File, wrapperClassName: String, dependencies: List
     val stringifiedDeps = dependencies.map { "    compile \"$it\"" }.joinToString("\n")
     val stringifiedRepos = customRepos.map { "    maven {\n        url '${it.url}'\n    }\n" }.joinToString("\n")
 
-    val jvmOptions = runtimeOptions.split(" ")
+    val jvmOptions = runtimeOptions
         .filter { it.startsWith("-J") }
         .map { it.removePrefix("-J") }
         .map { '"' + it + '"' }

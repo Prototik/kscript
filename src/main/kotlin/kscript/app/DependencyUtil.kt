@@ -9,12 +9,10 @@ import org.sonatype.aether.util.artifact.DefaultArtifact
 import org.sonatype.aether.util.artifact.JavaScopes.COMPILE
 import org.sonatype.aether.util.artifact.JavaScopes.RUNTIME
 import java.io.File
+import kotlin.system.*
 
 
 val DEP_LOOKUP_CACHE_FILE = File(KSCRIPT_CACHE_DIR, "dependency_cache.txt")
-
-val CP_SEPARATOR_CHAR = if (System.getProperty("os.name").toLowerCase().contains("windows")) ";" else ":"
-
 
 fun resolveDependencies(depIds: List<String>, customRepos: List<MavenRepo> = emptyList(), loggingEnabled: Boolean): String? {
 
@@ -23,7 +21,7 @@ fun resolveDependencies(depIds: List<String>, customRepos: List<MavenRepo> = emp
         return null
     }
 
-    val depsHash = depIds.joinToString(CP_SEPARATOR_CHAR)
+    val depsHash = depIds.joinToString(File.pathSeparator)
 
 
     // Use cached classpath from previous run if present
@@ -38,7 +36,7 @@ fun resolveDependencies(depIds: List<String>, customRepos: List<MavenRepo> = emp
 
 
             // Make sure that local dependencies have not been wiped since resolving them (like by deleting .m2) (see #146)
-            if (cachedCP.split(CP_SEPARATOR_CHAR).all { File(it).exists() }) {
+            if (cachedCP.split(File.pathSeparatorChar).all { File(it).exists() }) {
                 return cachedCP
             } else {
                 System.err.println("[kscript] Detected missing dependencies in cache.")
@@ -51,7 +49,7 @@ fun resolveDependencies(depIds: List<String>, customRepos: List<MavenRepo> = emp
 
     try {
         val artifacts = resolveDependenciesViaAether(depIds, customRepos, loggingEnabled)
-        val classPath = artifacts.map { it.file.absolutePath }.joinToString(CP_SEPARATOR_CHAR)
+        val classPath = artifacts.map { it.file.absolutePath }.joinToString(File.pathSeparator)
 
         if (loggingEnabled) infoMsg("Dependencies resolved")
 
@@ -64,7 +62,7 @@ fun resolveDependencies(depIds: List<String>, customRepos: List<MavenRepo> = emp
         // Probably a wrapped Nullpointer from 'DefaultRepositorySystem.resolveDependencies()', this however is probably a connection problem.
         errorMsg("Failed while connecting to the server. Check the connection (http/https, port, proxy, credentials, etc.) of your maven dependency locators. If you suspect this is a bug, you can create an issue on https://github.com/holgerbrandl/kscript")
         errorMsg("Exception: $e")
-        quit(1)
+        exitProcess(1)
     }
 }
 
@@ -97,7 +95,7 @@ fun depIdToArtifact(depId: String): Artifact {
 
     if (matchResult == null) {
         System.err.println("[ERROR] Invalid dependency locator: '${depId}'.  Expected format is groupId:artifactId:version[:classifier][@type]")
-        quit(1)
+        exitProcess(1)
     }
 
     val groupId = matchResult.groupValues[1]
